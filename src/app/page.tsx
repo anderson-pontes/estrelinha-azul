@@ -1,20 +1,21 @@
+// src/app/page.tsx
 
 import {
   collection,
   getDocs,
   orderBy,
   query,
-  where, // Importe o 'where' para criar filtros
+  where,
   FirestoreDataConverter,
   QueryDocumentSnapshot,
   SnapshotOptions,
   WithFieldValue,
   DocumentData,
-  QueryConstraint, // Importe o tipo para os modificadores
+  QueryConstraint,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Story } from '@/lib/data';
-import { StoryGrid } from '@/components/StoryGrid'; // Precisaremos do componente de cliente
+import { StoryGrid } from '@/components/StoryGrid';
 
 const storyConverter: FirestoreDataConverter<Story> = {
   fromFirestore(
@@ -22,19 +23,21 @@ const storyConverter: FirestoreDataConverter<Story> = {
     options: SnapshotOptions
   ): Story {
     const data = snapshot.data(options);
-    // Um pequeno ajuste para garantir a tipagem correta
     return {
       id: snapshot.id,
       ...data,
     } as Story;
   },
   toFirestore(story: WithFieldValue<Story>): DocumentData {
-    const { id, ...data } = story;
+    // AQUI ESTÁ A CORREÇÃO:
+    // Trocamos 'id' por 'id: _' para sinalizar que o id está sendo
+    // intencionalmente ignorado e não utilizado.
+    const { id: _, ...data } = story;
     return data;
   },
 };
 
-// MUDANÇA 1: A função agora aceita um objeto com os filtros
+// A função agora aceita um objeto com os filtros
 async function getStories({
   category,
   search,
@@ -44,7 +47,6 @@ async function getStories({
 }): Promise<Story[]> {
   const storiesCollection = collection(db, 'stories').withConverter(storyConverter);
 
-  // MUDANÇA 2: Construímos a query dinamicamente
   const constraints: QueryConstraint[] = [];
 
   // Adiciona filtro de categoria, se aplicável
@@ -54,7 +56,6 @@ async function getStories({
 
   // Adiciona filtro de busca por título (simula "começa com")
   if (search) {
-    // Esta combinação encontra documentos cujo 'title' começa com o termo da busca
     constraints.push(where('title', '>=', search));
     constraints.push(where('title', '<=', search + '\uf8ff'));
   }
@@ -62,7 +63,6 @@ async function getStories({
   // Adiciona a ordenação padrão por título
   constraints.push(orderBy('title'));
 
-  // Usa o array de 'constraints' para montar a query final
   const q = query(storiesCollection, ...constraints);
 
   const storiesSnapshot = await getDocs(q);
@@ -70,7 +70,7 @@ async function getStories({
   return storiesList;
 }
 
-// MUDANÇA 3: A página agora lê os parâmetros da URL para buscar os dados
+// A página agora lê os parâmetros da URL para buscar os dados
 export default async function HomePage({
   searchParams,
 }: {
@@ -79,9 +79,7 @@ export default async function HomePage({
   const category = searchParams.category;
   const search = searchParams.search;
 
-  // Chama a função de busca passando os filtros da URL
   const stories = await getStories({ category, search });
 
-  // Passa as histórias já filtradas para o componente de cliente
   return <StoryGrid initialStories={stories} />;
 }
