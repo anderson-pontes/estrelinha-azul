@@ -32,6 +32,8 @@ const storyConverter: FirestoreDataConverter<Story> = {
     // AQUI ESTÁ A CORREÇÃO:
     // Trocamos 'id' por 'id: _' para sinalizar que o id está sendo
     // intencionalmente ignorado e não utilizado.
+    
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id: _, ...data } = story;
     return data;
   },
