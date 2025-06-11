@@ -3,7 +3,6 @@
 import type { Metadata } from "next";
 import { Fredoka } from "next/font/google";
 import "./globals.css";
-// 1. Importe os novos componentes
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
@@ -25,10 +24,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" className={`${fredoka.variable}`}>
-      {/* 2. Estruture o body para o layout completo */}
-      <body className="flex flex-col min-h-screen bg-[#FFFDF5]">
+      {/* A única mudança é na cor de fundo do body */}
+      <body className="flex flex-col min-h-screen bg-[#F7F7F2]">
         <Header />
-        {/* 3. O main agora cresce para preencher o espaço, empurrando o footer para baixo */}
         <main className="flex-grow">
           {children}
         </main>

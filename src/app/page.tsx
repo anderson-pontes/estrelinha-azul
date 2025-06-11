@@ -1,79 +1,87 @@
-// src/app/page.tsx
-'use client';
 
-import { useState, useMemo } from 'react';
-import { Input } from "@/components/ui/input";
-import { StoryCard } from "@/components/StoryCard";
-import { stories, categories, StoryCategory } from "@/lib/data";
-import { Search } from 'lucide-react';
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  where, // Importe o 'where' para criar filtros
+  FirestoreDataConverter,
+  QueryDocumentSnapshot,
+  SnapshotOptions,
+  WithFieldValue,
+  DocumentData,
+  QueryConstraint, // Importe o tipo para os modificadores
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Story } from '@/lib/data';
+import { StoryGrid } from '@/components/StoryGrid'; // Precisaremos do componente de cliente
 
-export default function HomePage() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<StoryCategory | 'All'>('All');
+const storyConverter: FirestoreDataConverter<Story> = {
+  fromFirestore(
+    snapshot: QueryDocumentSnapshot,
+    options: SnapshotOptions
+  ): Story {
+    const data = snapshot.data(options);
+    // Um pequeno ajuste para garantir a tipagem correta
+    return {
+      id: snapshot.id,
+      ...data,
+    } as Story;
+  },
+  toFirestore(story: WithFieldValue<Story>): DocumentData {
+    const { id, ...data } = story;
+    return data;
+  },
+};
 
-  const filteredStories = useMemo(() => {
-    return stories.filter(story => {
-      const matchesCategory = selectedCategory === 'All' || story.category === selectedCategory;
-      const matchesSearch = story.title.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-  }, [searchTerm, selectedCategory]);
+// MUDANÇA 1: A função agora aceita um objeto com os filtros
+async function getStories({
+  category,
+  search,
+}: {
+  category?: string;
+  search?: string;
+}): Promise<Story[]> {
+  const storiesCollection = collection(db, 'stories').withConverter(storyConverter);
 
-  return (
-    // Aplicando a nova paleta vibrante
-    <div className="min-h-screen bg-[#FFFDF5] text-[#3D4752]">
-      <main className="container mx-auto px-4 py-12 md:py-20">
-        <header className="text-center mb-16">
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter mb-4 text-[#3D4752]">
-            Histórias para Sonhar
-          </h1>
-          <p className="text-lg md:text-xl text-[#8492A6] max-w-2xl mx-auto">
-            Explore um universo de fábulas, aventuras e fantasias feitas para acender a imaginação.
-          </p>
-        </header>
+  // MUDANÇA 2: Construímos a query dinamicamente
+  const constraints: QueryConstraint[] = [];
 
-        {/* --- Controles de Filtro com Cores Vivas --- */}
-        <div className="flex flex-col md:flex-row gap-6 mb-12 items-center">
-          <div className="relative flex-grow w-full">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#8492A6]" />
-            <Input
-              type="text"
-              placeholder="Qual historinha você procura?"
-              className="w-full text-base rounded-full pl-12 pr-4 py-6 border-2 border-transparent bg-white shadow-md focus:border-[#00A9B5] focus:ring-2 focus:ring-[#00A9B5]/50"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-3 flex-wrap justify-center">
-            <button
-              onClick={() => setSelectedCategory('All')}
-              className={`px-5 py-2 rounded-full text-sm font-bold transition-transform duration-200 hover:scale-105 ${
-                selectedCategory === 'All' ? 'bg-[#00A9B5] text-white shadow-lg' : 'bg-white hover:bg-gray-100 text-[#3D4752] shadow-md'
-              }`}
-            >
-              Todas
-            </button>
-            {categories.map(category => (
-              <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`px-5 py-2 rounded-full text-sm font-bold transition-transform duration-200 hover:scale-105 ${
-                  selectedCategory === category ? 'bg-[#00A9B5] text-white shadow-lg' : 'bg-white hover:bg-gray-100 text-[#3D4752] shadow-md'
-                }`}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-        </div>
+  // Adiciona filtro de categoria, se aplicável
+  if (category && category !== 'All') {
+    constraints.push(where('category', '==', category));
+  }
 
-        {/* --- Grid de Histórias --- */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-8 gap-y-12">
-          {filteredStories.map(story => (
-            <StoryCard key={story.id} story={story} />
-          ))}
-        </div>
-      </main>
-    </div>
-  );
+  // Adiciona filtro de busca por título (simula "começa com")
+  if (search) {
+    // Esta combinação encontra documentos cujo 'title' começa com o termo da busca
+    constraints.push(where('title', '>=', search));
+    constraints.push(where('title', '<=', search + '\uf8ff'));
+  }
+
+  // Adiciona a ordenação padrão por título
+  constraints.push(orderBy('title'));
+
+  // Usa o array de 'constraints' para montar a query final
+  const q = query(storiesCollection, ...constraints);
+
+  const storiesSnapshot = await getDocs(q);
+  const storiesList = storiesSnapshot.docs.map(doc => doc.data());
+  return storiesList;
+}
+
+// MUDANÇA 3: A página agora lê os parâmetros da URL para buscar os dados
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: { category?: string; search?: string };
+}) {
+  const category = searchParams.category;
+  const search = searchParams.search;
+
+  // Chama a função de busca passando os filtros da URL
+  const stories = await getStories({ category, search });
+
+  // Passa as histórias já filtradas para o componente de cliente
+  return <StoryGrid initialStories={stories} />;
 }
